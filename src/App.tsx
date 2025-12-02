@@ -6,48 +6,47 @@ import BookDetail from './pages/BookDetail';
 import Profile from './pages/Profile';
 import About from './pages/About';
 import Favorites from './pages/Favorites';
-import { Book, Page, UserProfile } from './types'; // Impor UserProfile
+import Login from './pages/Login';
+import Register from './pages/Register';
+import { Book, Page, UserProfile } from './types';
 import BottomNav from './components/BottomNav';
 
-const MOCK_USER_ID = '21120123140168'; // Ganti dengan ID pengguna yang sesuai
-
 function App() {
+  // Auth State
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    // Cek localStorage saat load awal untuk persistensi login
+    const savedUser = localStorage.getItem('litly_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // App State
   const [currentPage, setCurrentPage] = useState<Page>('landing');
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Data dari API
   const [allBooks, setAllBooks] = useState<Book[]>([]);
   const [isLoadingBooks, setIsLoadingBooks] = useState(true);
-  const [favoriteIDs, setFavoriteIDs] = useState<string[]>([]); // Default array kosong
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null); // State baru untuk profil
+  const [favoriteIDs, setFavoriteIDs] = useState<string[]>([]); 
 
-  // --- EFEK UNTUK MENGAMBIL DATA ---
+  // --- Auth Handlers ---
+  const handleLogin = (userData: UserProfile) => {
+    setUser(userData);
+    localStorage.setItem('litly_user', JSON.stringify(userData));
+    setIsRegistering(false);
+    setCurrentPage('landing'); // Redirect ke landing setelah login
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('litly_user');
+    setFavoriteIDs([]);
+    setCurrentPage('landing');
+  };
+
+  // --- Data Fetching ---
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await fetch(`/api/profile/${MOCK_USER_ID}`);
-        if (response.ok) {
-          const data: UserProfile = await response.json();
-          setUserProfile(data);
-        }
-      } catch (error) {
-        console.error("Gagal mengambil profil:", error);
-      }
-    };
-    
-    const fetchFavorites = async () => {
-      try {
-        const response = await fetch(`/api/favorites/${MOCK_USER_ID}`);
-        if (response.ok) {
-          const data: string[] = await response.json();
-          setFavoriteIDs(data);
-        }
-      } catch (error) {
-        console.error("Gagal mengambil favorit:", error);
-      }
-    };
-
+    // Hanya fetch data jika user sudah login dan TIDAK di halaman landing (kecuali fetch buku)
     const fetchBooks = async () => {
       setIsLoadingBooks(true);
       try {
@@ -61,19 +60,38 @@ function App() {
     };
 
     fetchBooks();
-    
-    // Logika untuk mengambil data pengguna
-    if (currentPage === 'landing') {
-       // Reset profile jika kembali ke landing
-       setUserProfile(null);
-    } else {
-       // Jika tidak di landing, ambil data profil & favorit
-       // (Ini juga akan berjalan saat pertama kali pindah dari landing)
-       fetchProfile();
-       fetchFavorites();
-    }
 
-  }, [currentPage]); // Dijalankan ulang saat halaman berubah
+    if (user && currentPage !== 'landing') {
+      const fetchFavorites = async () => {
+        try {
+          const response = await fetch(`/api/favorites/${user.id}`);
+          if (response.ok) {
+            const data: string[] = await response.json();
+            setFavoriteIDs(data);
+          }
+        } catch (error) {
+          console.error("Gagal mengambil favorit:", error);
+        }
+      };
+      
+      // Refresh profile data (untuk memastikan sync)
+      const fetchProfile = async () => {
+        try {
+          const response = await fetch(`/api/profile/${user.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setUser(data);
+            localStorage.setItem('litly_user', JSON.stringify(data));
+          }
+        } catch (error) {
+          console.error("Gagal mengambil profil:", error);
+        }
+      };
+
+      fetchFavorites();
+      fetchProfile();
+    }
+  }, [currentPage, user?.id]); 
 
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
@@ -87,22 +105,20 @@ function App() {
     setCurrentPage('detail');
   };
 
-  // --- FUNGSI FAVORIT (API BARU) ---
   const toggleFavorite = async (bookId: string) => {
+    if (!user) return; // Guard clause
+
     const isFavorite = favoriteIDs.includes(bookId);
-    
-    // Optimistic UI Update: Langsung perbarui state
     const newFavorites = isFavorite
       ? favoriteIDs.filter((id) => id !== bookId)
       : [...favoriteIDs, bookId];
     setFavoriteIDs(newFavorites);
 
-    // Kirim permintaan ke API
     try {
       const method = isFavorite ? 'DELETE' : 'POST';
       const url = isFavorite
-        ? `/api/favorites/${MOCK_USER_ID}/${bookId}`
-        : `/api/favorites/${MOCK_USER_ID}`;
+        ? `/api/favorites/${user.id}/${bookId}`
+        : `/api/favorites/${user.id}`;
         
       const options: RequestInit = { method };
       
@@ -114,8 +130,7 @@ function App() {
       await fetch(url, options);
     } catch (error) {
       console.error("Gagal update favorit:", error);
-      // Rollback jika gagal
-      setFavoriteIDs(favoriteIDs);
+      setFavoriteIDs(favoriteIDs); // Rollback
     }
   };
 
@@ -133,6 +148,15 @@ function App() {
     return allBooks.filter((book) => favoriteIDs.includes(book.id));
   }, [allBooks, favoriteIDs]);
 
+  // --- Render Auth Pages if not logged in ---
+  if (!user) {
+    if (isRegistering) {
+      return <Register onRegisterSuccess={handleLogin} onSwitchToLogin={() => setIsRegistering(false)} />;
+    }
+    return <Login onLogin={handleLogin} onSwitchToRegister={() => setIsRegistering(true)} />;
+  }
+
+  // --- Render Main App ---
   const renderPage = () => {
     switch (currentPage) {
       case 'landing':
@@ -152,12 +176,27 @@ function App() {
           <BookDetail book={selectedBook} onBack={() => handleNavigate('home')} />
         ) : null;
       case 'profile':
-        // Kirim ID pengguna dan data profil ke halaman Profile
-        return <Profile 
-                  userId={MOCK_USER_ID} 
-                  initialProfile={userProfile} 
-                  onProfileUpdate={setUserProfile} // Callback untuk update foto
-               />;
+        return (
+          <div className="relative">
+            <Profile 
+              userId={user.id} 
+              initialProfile={user} 
+              onProfileUpdate={(updated) => {
+                setUser(updated);
+                localStorage.setItem('litly_user', JSON.stringify(updated));
+              }} 
+            />
+            {/* Tombol Logout Tambahan di halaman profil */}
+            <div className="max-w-4xl mx-auto px-8 pb-16">
+               <button 
+                 onClick={handleLogout}
+                 className="w-full border border-red-500 text-red-500 py-3 rounded-lg hover:bg-red-50 transition-colors"
+               >
+                 Keluar (Logout)
+               </button>
+            </div>
+          </div>
+        );
       case 'about':
         return <About />;
       case 'favorites':
@@ -182,19 +221,16 @@ function App() {
           currentPage={currentPage}
           onNavigate={handleNavigate}
           onSearch={setSearchQuery}
-          // Kirim URL foto profil
-          profilePicUrl={userProfile?.profilepicurl || null}
+          profilePicUrl={user.profilepicurl || null}
         />
       )}
       {renderPage()}
       
-      {/* Tampilkan BottomNav jika bukan di landing page */}
       {currentPage !== 'landing' && (
         <BottomNav
           currentPage={currentPage}
           onNavigate={handleNavigate}
-          // Kirim URL foto profil
-          profilePicUrl={userProfile?.profilepicurl || null}
+          profilePicUrl={user.profilepicurl || null}
         />
       )}
     </div>

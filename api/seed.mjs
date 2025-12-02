@@ -1,6 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-import { books } from './seed-data.js'; 
+import { books } from './seed-data.js';
 
 dotenv.config({ path: '../.env' });
 
@@ -11,55 +11,18 @@ const pool = new Pool({
   ssl: { require: true },
 });
 
-// USER DEFAULT
-const DEFAULT_USER = {
-  id: '21120123140168',
-  name: 'Riyarakhma Febriana',
-  nim: '21120123140168',
-  group: 'Teknik Komputer',
-  email: 'riyarakhma@example.com',
-  profilePicUrl: null,
-};
-
 async function seedDatabase() {
   console.log('----------------------------------------');
-  console.log('🚀 Memulai proses seeding...');
+  console.log('🚀 Memulai proses seeding (Hanya Buku)...');
   console.log('----------------------------------------');
 
   const client = await pool.connect();
 
   try {
-    // 1. Kosongkan favorites
-    console.log('🧹 Menghapus tabel user_favorites...');
-    await client.query(`TRUNCATE TABLE user_favorites RESTART IDENTITY CASCADE;`);
-    console.log('✔ user_favorites dikosongkan.');
+    // Kita TIDAK menghapus user_favorites atau users agar data registrasi aman.
+    // Kita hanya akan memperbarui atau menambahkan buku.
 
-    // 2. Insert / update user default
-    console.log('👤 Menambahkan user default...');
-    await client.query(
-      `
-      INSERT INTO users (id, name, nim, "group", email, profilePicUrl)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (id) DO UPDATE 
-        SET name = EXCLUDED.name,
-            nim = EXCLUDED.nim,
-            "group" = EXCLUDED.group,
-            email = EXCLUDED.email,
-            profilePicUrl = EXCLUDED.profilePicUrl;
-    `,
-      [
-        DEFAULT_USER.id,
-        DEFAULT_USER.name,
-        DEFAULT_USER.nim,
-        DEFAULT_USER.group,
-        DEFAULT_USER.email,
-        DEFAULT_USER.profilePicUrl,
-      ]
-    );
-    console.log('✔ User default selesai.');
-
-    // 3. Insert books FROM seed-data.js
-    console.log(`📚 Menambahkan ${books.length} buku dari seed-data.js ...`);
+    console.log(`📚 Memproses ${books.length} buku dari seed-data.js ...`);
 
     for (const b of books) {
       await client.query(
@@ -73,7 +36,22 @@ async function seedDatabase() {
           $1,$2,$3,$4,$5,$6,$7,$8,
           $9,$10,$11,$12,$13,$14,$15,$16
         )
-        ON CONFLICT (id) DO NOTHING;
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          author = EXCLUDED.author,
+          year = EXCLUDED.year,
+          cover = EXCLUDED.cover,
+          description = EXCLUDED.description,
+          category = EXCLUDED.category,
+          pages = EXCLUDED.pages,
+          isbn = EXCLUDED.isbn,
+          price = EXCLUDED.price,
+          publisher = EXCLUDED.publisher,
+          publicationDate = EXCLUDED.publicationDate,
+          format = EXCLUDED.format,
+          dimensions = EXCLUDED.dimensions,
+          synopsis = EXCLUDED.synopsis,
+          purchaseUrl = EXCLUDED.purchaseUrl;
       `,
         [
           b.id,
@@ -96,10 +74,9 @@ async function seedDatabase() {
       );
     }
 
-    console.log('✔ Semua buku dari seed-data.js telah dimasukkan.');
-
+    console.log('✔ Tabel buku telah disinkronisasi.');
     console.log('----------------------------------------');
-    console.log('🎉 SEEDING SELESAI TANPA ERROR!');
+    console.log('🎉 SEEDING SELESAI!');
     console.log('----------------------------------------');
   } catch (err) {
     console.error('❌ ERROR saat seeding:', err);
