@@ -8,7 +8,7 @@
     "dev:client": "vite",
     "dev:server": "npm start --prefix api",
     "db:seed": "npm run seed --prefix api",
-    "build": "vite build",
+    "build": "npm install --prefix api && npm run db:seed && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
