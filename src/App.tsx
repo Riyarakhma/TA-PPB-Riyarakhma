@@ -9,8 +9,7 @@ import Favorites from './pages/Favorites';
 import { Book, Page, UserProfile } from './types'; // Impor UserProfile
 import BottomNav from './components/BottomNav';
 
-// ID pengguna default (hardcoded) - Ganti dengan ID dari data Profile.tsx
-const MOCK_USER_ID = '21120123130103';
+const MOCK_USER_ID = '21120123140168'; // Ganti dengan ID pengguna yang sesuai
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('landing');
